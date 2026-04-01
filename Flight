@@ -1,0 +1,285 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+local camera = workspace.CurrentCamera
+
+local MIN_SPEED = 0
+local MAX_SPEED = math.huge
+local DEFAULT_SPEED = 150
+
+local flightSpeed = DEFAULT_SPEED
+local flightActive = false
+local originalProperties = {}
+local flightConnection = nil
+local noclipConnection = nil
+local animationTrack = nil
+local trailConnection = nil
+
+local function uncarpet()
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+if track.Animation and track.Animation.AnimationId == "rbxassetid://282574440" then
+track:Stop()
+end
+end
+end
+
+local function playFlightAnimation()
+uncarpet()
+local anim = Instance.new("Animation")
+anim.AnimationId = "rbxassetid://282574440"
+animationTrack = humanoid:LoadAnimation(anim)
+animationTrack.Looped = true
+animationTrack:Play()
+end
+
+local function stopFlightAnimation()
+uncarpet()
+end
+
+local TRAIL_CONFIG = {
+enabled = true,
+color = Color3.fromRGB(255,255,255),
+width = 0.15,
+maxSegmentLength = 2,
+fadeTime = 0.5,
+}
+
+local trailParts = {}
+local lastLeftPos, lastRightPos = nil, nil
+
+local function createContinuousTrail(startPos, endPos)
+local distance = (endPos - startPos).Magnitude
+local midpoint = startPos + (endPos - startPos)/2
+
+local part = Instance.new("Part")      
+part.Size = Vector3.new(TRAIL_CONFIG.width, distance, TRAIL_CONFIG.width)      
+part.CFrame = CFrame.new(midpoint, endPos) * CFrame.Angles(math.rad(90),0,0)      
+part.Anchored = true      
+part.CanCollide = false      
+part.Material = Enum.Material.Neon      
+part.Color = TRAIL_CONFIG.color      
+part.Parent = workspace      
+  
+table.insert(trailParts, part)      
+TweenService:Create(part, TweenInfo.new(TRAIL_CONFIG.fadeTime), {Transparency = 1}):Play()      
+game:GetService("Debris"):AddItem(part, TRAIL_CONFIG.fadeTime)
+
+end
+
+local function startContinuousTrails()
+if trailConnection then trailConnection:Disconnect() end
+lastLeftPos, lastRightPos = nil, nil
+trailParts = {}
+
+trailConnection = RunService.Heartbeat:Connect(function()      
+    if not flightActive or not character then return end      
+  
+    local leftArm = character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftLowerArm")      
+    local rightArm = character:FindFirstChild("Right Arm") or character:FindFirstChild("RightLowerArm")      
+  
+    if leftArm then      
+        if lastLeftPos then      
+            if (leftArm.Position - lastLeftPos).Magnitude >= TRAIL_CONFIG.maxSegmentLength then      
+                createContinuousTrail(lastLeftPos, leftArm.Position)      
+                lastLeftPos = leftArm.Position      
+            end      
+        else      
+            lastLeftPos = leftArm.Position      
+        end      
+    end      
+  
+    if rightArm then      
+        if lastRightPos then      
+            if (rightArm.Position - lastRightPos).Magnitude >= TRAIL_CONFIG.maxSegmentLength then      
+                createContinuousTrail(lastRightPos, rightArm.Position)      
+                lastRightPos = rightArm.Position      
+            end      
+        else      
+            lastRightPos = rightArm.Position      
+        end      
+    end      
+end)
+
+end
+
+local function stopContinuousTrails()
+if trailConnection then
+trailConnection:Disconnect()
+trailConnection = nil
+end
+for _, part in ipairs(trailParts) do
+if part and part.Parent then
+part:Destroy()
+end
+end
+trailParts = {}
+lastLeftPos, lastRightPos = nil, nil
+end
+
+local function enableNoclip()
+for _, part in pairs(character:GetDescendants()) do
+if part:IsA("BasePart") then
+originalProperties[part] = part.CanCollide
+part.CanCollide = false
+end
+end
+
+if noclipConnection then noclipConnection:Disconnect() end      
+noclipConnection = RunService.Heartbeat:Connect(function()      
+    if not flightActive or not character then return end      
+    for _, part in pairs(character:GetDescendants()) do      
+        if part:IsA("BasePart") then      
+            part.CanCollide = false      
+        end      
+    end      
+end)
+
+end
+
+local function disableNoclip()
+if noclipConnection then
+noclipConnection:Disconnect()
+noclipConnection = nil
+end
+for part, state in pairs(originalProperties) do
+if part and part.Parent then
+part.CanCollide = state
+end
+end
+originalProperties = {}
+end
+
+local function startFlight()
+if flightConnection then flightConnection:Disconnect() end
+
+flightConnection = RunService.RenderStepped:Connect(function()      
+    if not flightActive then return end      
+  
+    local dir = camera.CFrame.LookVector.Unit      
+    rootPart.AssemblyLinearVelocity = dir * flightSpeed      
+    rootPart.AssemblyAngularVelocity = Vector3.zero      
+    rootPart.CFrame = CFrame.new(rootPart.Position, rootPart.Position + dir)      
+end)
+
+end
+
+local function stopFlight()
+if flightConnection then
+flightConnection:Disconnect()
+flightConnection = nil
+end
+rootPart.AssemblyLinearVelocity = Vector3.zero
+rootPart.AssemblyAngularVelocity = Vector3.zero
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlightGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 110, 0, 24)
+mainFrame.Position = UDim2.new(1, -120, 0, 10)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+mainFrame.BackgroundTransparency = 0.1
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(1, 0)
+mainCorner.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.FillDirection = Enum.FillDirection.Horizontal
+layout.VerticalAlignment = Enum.VerticalAlignment.Center
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.Padding = UDim.new(0, 0)
+layout.Parent = mainFrame
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(0, 65, 0, 22)
+speedInput.Text = tostring(DEFAULT_SPEED)
+speedInput.TextSize = 10
+speedInput.Font = Enum.Font.Gotham
+speedInput.TextColor3 = Color3.new(1,1,1)
+speedInput.BackgroundColor3 = Color3.fromRGB(30,30,30)
+speedInput.BorderSizePixel = 0
+speedInput.ClearTextOnFocus = false
+speedInput.Parent = mainFrame
+
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 12)
+inputCorner.Parent = speedInput
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 45, 0, 22)
+toggleButton.Text = "GO"
+toggleButton.TextSize = 10
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextColor3 = Color3.new(1,1,1)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)
+toggleButton.BorderSizePixel = 0
+toggleButton.Parent = mainFrame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0, 12)
+buttonCorner.Parent = toggleButton
+
+speedInput.FocusLost:Connect(function()
+local val = tonumber(speedInput.Text)
+if val then
+flightSpeed = math.clamp(val, MIN_SPEED, MAX_SPEED)
+speedInput.Text = tostring(flightSpeed)
+else
+speedInput.Text = tostring(flightSpeed)
+end
+end)
+
+local function toggleFlight()
+flightActive = not flightActive
+
+if flightActive then      
+    toggleButton.Text = "✈"      
+    toggleButton.BackgroundColor3 = Color3.fromRGB(200,60,60)      
+  
+    enableNoclip()      
+    playFlightAnimation()      
+    startContinuousTrails()      
+    startFlight()      
+else      
+    toggleButton.Text = "GO"      
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)      
+  
+    stopFlight()      
+    stopContinuousTrails()      
+    stopFlightAnimation()      
+    disableNoclip()      
+end
+
+end
+
+toggleButton.MouseButton1Click:Connect(toggleFlight)
+
+player.CharacterAdded:Connect(function(char)
+character = char
+humanoid = char:WaitForChild("Humanoid")
+rootPart = char:WaitForChild("HumanoidRootPart")
+
+flightActive = false      
+stopFlightAnimation()      
+uncarpet()      
+disableNoclip()      
+stopContinuousTrails()
+
+end)
+
+print("Flight script with compact pill GUI and infinite speed loaded!")
