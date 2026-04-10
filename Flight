@@ -5,7 +5,7 @@ local playerGui = plr:WaitForChild("PlayerGui")
 local userInputService = game:GetService("UserInputService")
 
 local flyEnabled = false
-local speed = 3
+local speed = 2
 local pos, gyro, heartbeatEvent
 
 local function setShiftlock(state)
@@ -45,6 +45,59 @@ local function setNoclipState(state)
         resetCharacterCollision(char)
     end
 end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlightGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 110, 0, 24)
+mainFrame.Position = UDim2.new(1, -120, 0, 10)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+mainFrame.BackgroundTransparency = 0.1
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(1, 0)
+mainCorner.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.FillDirection = Enum.FillDirection.Horizontal
+layout.VerticalAlignment = Enum.VerticalAlignment.Center
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.Padding = UDim.new(0, 0)
+layout.Parent = mainFrame
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(0, 65, 0, 22)
+speedInput.Text = tostring(speed)
+speedInput.TextSize = 10
+speedInput.Font = Enum.Font.Gotham
+speedInput.TextColor3 = Color3.new(1,1,1)
+speedInput.BackgroundColor3 = Color3.fromRGB(30,30,30)
+speedInput.BorderSizePixel = 0
+speedInput.ClearTextOnFocus = false
+speedInput.Parent = mainFrame
+
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 12)
+inputCorner.Parent = speedInput
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 45, 0, 22)
+toggleButton.Text = "GO"
+toggleButton.TextSize = 10
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextColor3 = Color3.new(1,1,1)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)
+toggleButton.BorderSizePixel = 0
+toggleButton.Parent = mainFrame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0, 12)
+buttonCorner.Parent = toggleButton
 
 local function stopFly()
     flyEnabled = false
@@ -129,59 +182,6 @@ local function startFly()
         humanoid.PlatformStand = true
     end)
 end
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FlightGUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = playerGui
-
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 110, 0, 24)
-mainFrame.Position = UDim2.new(1, -120, 0, 10)
-mainFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
-mainFrame.BackgroundTransparency = 0.1
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
-
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(1, 0)
-mainCorner.Parent = mainFrame
-
-local layout = Instance.new("UIListLayout")
-layout.FillDirection = Enum.FillDirection.Horizontal
-layout.VerticalAlignment = Enum.VerticalAlignment.Center
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.Padding = UDim.new(0, 0)
-layout.Parent = mainFrame
-
-local speedInput = Instance.new("TextBox")
-speedInput.Size = UDim2.new(0, 65, 0, 22)
-speedInput.Text = tostring(speed)
-speedInput.TextSize = 10
-speedInput.Font = Enum.Font.Gotham
-speedInput.TextColor3 = Color3.new(1,1,1)
-speedInput.BackgroundColor3 = Color3.fromRGB(30,30,30)
-speedInput.BorderSizePixel = 0
-speedInput.ClearTextOnFocus = false
-speedInput.Parent = mainFrame
-
-local inputCorner = Instance.new("UICorner")
-inputCorner.CornerRadius = UDim.new(0, 12)
-inputCorner.Parent = speedInput
-
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 45, 0, 22)
-toggleButton.Text = "GO"
-toggleButton.TextSize = 10
-toggleButton.Font = Enum.Font.GothamBold
-toggleButton.TextColor3 = Color3.new(1,1,1)
-toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)
-toggleButton.BorderSizePixel = 0
-toggleButton.Parent = mainFrame
-
-local buttonCorner = Instance.new("UICorner")
-buttonCorner.CornerRadius = UDim.new(0, 12)
-buttonCorner.Parent = toggleButton
 
 speedInput.FocusLost:Connect(function()
     local num = tonumber(speedInput.Text)
