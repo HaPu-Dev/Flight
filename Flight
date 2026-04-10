@@ -1,184 +1,133 @@
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
+local plr = game:GetService("Players").LocalPlayer
+local run = game:GetService("RunService")
+local cam = workspace.CurrentCamera
+local playerGui = plr:WaitForChild("PlayerGui")
+local userInputService = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local rootPart = character:WaitForChild("HumanoidRootPart")
-local camera = workspace.CurrentCamera
+local flyEnabled = false
+local speed = 3
+local pos, gyro, heartbeatEvent
 
-local MIN_SPEED = 0
-local MAX_SPEED = math.huge
-local DEFAULT_SPEED = 150
-
-local flightSpeed = DEFAULT_SPEED
-local flightActive = false
-local originalProperties = {}
-local flightConnection = nil
-local noclipConnection = nil
-local animationTrack = nil
-local trailConnection = nil
-
-local function uncarpet()
-local char = player.Character or player.CharacterAdded:Wait()
-local hum = char:WaitForChild("Humanoid")
-for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-if track.Animation and track.Animation.AnimationId == "rbxassetid://282574440" then
-track:Stop()
-end
-end
+local function setShiftlock(state)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("ShiftLock", state)
+        if state then
+            userInputService:SetMouseBehavior(Enum.MouseBehavior.LockCurrentPosition)
+        else
+            userInputService:SetMouseBehavior(Enum.MouseBehavior.Default)
+        end
+    end)
 end
 
-local function playFlightAnimation()
-uncarpet()
-local anim = Instance.new("Animation")
-anim.AnimationId = "rbxassetid://282574440"
-animationTrack = humanoid:LoadAnimation(anim)
-animationTrack.Looped = true
-animationTrack:Play()
+local function resetCharacterCollision(char)
+    if not char then return end
+    for _, o in ipairs(char:GetDescendants()) do
+        if o:IsA("BasePart") then
+            local name = o.Name:lower()
+            if name:find("torso") or name:find("root") or name:find("head") then
+                o.CanCollide = true
+            else
+                o.CanCollide = false
+            end
+        end
+    end
 end
 
-local function stopFlightAnimation()
-uncarpet()
+local function setNoclipState(state)
+    local char = plr.Character
+    if state and char then
+        for _, o in ipairs(char:GetDescendants()) do
+            if o:IsA("BasePart") then
+                o.CanCollide = false
+            end
+        end
+    elseif not state and char then
+        resetCharacterCollision(char)
+    end
 end
 
-local TRAIL_CONFIG = {
-enabled = true,
-color = Color3.fromRGB(255,255,255),
-width = 0.15,
-maxSegmentLength = 2,
-fadeTime = 0.5,
-}
-
-local trailParts = {}
-local lastLeftPos, lastRightPos = nil, nil
-
-local function createContinuousTrail(startPos, endPos)
-local distance = (endPos - startPos).Magnitude
-local midpoint = startPos + (endPos - startPos)/2
-
-local part = Instance.new("Part")      
-part.Size = Vector3.new(TRAIL_CONFIG.width, distance, TRAIL_CONFIG.width)      
-part.CFrame = CFrame.new(midpoint, endPos) * CFrame.Angles(math.rad(90),0,0)      
-part.Anchored = true      
-part.CanCollide = false      
-part.Material = Enum.Material.Neon      
-part.Color = TRAIL_CONFIG.color      
-part.Parent = workspace      
-  
-table.insert(trailParts, part)      
-TweenService:Create(part, TweenInfo.new(TRAIL_CONFIG.fadeTime), {Transparency = 1}):Play()      
-game:GetService("Debris"):AddItem(part, TRAIL_CONFIG.fadeTime)
-
+local function stopFly()
+    flyEnabled = false
+    if heartbeatEvent then 
+        heartbeatEvent:Disconnect() 
+        heartbeatEvent = nil
+    end
+    if pos then pos:Destroy() pos = nil end
+    if gyro then gyro:Destroy() gyro = nil end
+    
+    setNoclipState(false)
+    setShiftlock(false)
+    
+    local char = plr.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then 
+            humanoid.PlatformStand = false 
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+        resetCharacterCollision(char)
+    end
+    
+    toggleButton.Text = "GO"
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)
 end
 
-local function startContinuousTrails()
-if trailConnection then trailConnection:Disconnect() end
-lastLeftPos, lastRightPos = nil, nil
-trailParts = {}
+local function startFly()
+    if flyEnabled then return end
+    
+    flyEnabled = true
+    toggleButton.Text = "STOP"
+    toggleButton.BackgroundColor3 = Color3.fromRGB(200,60,60)
 
-trailConnection = RunService.Heartbeat:Connect(function()      
-    if not flightActive or not character then return end      
-  
-    local leftArm = character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftLowerArm")      
-    local rightArm = character:FindFirstChild("Right Arm") or character:FindFirstChild("RightLowerArm")      
-  
-    if leftArm then      
-        if lastLeftPos then      
-            if (leftArm.Position - lastLeftPos).Magnitude >= TRAIL_CONFIG.maxSegmentLength then      
-                createContinuousTrail(lastLeftPos, leftArm.Position)      
-                lastLeftPos = leftArm.Position      
-            end      
-        else      
-            lastLeftPos = leftArm.Position      
-        end      
-    end      
-  
-    if rightArm then      
-        if lastRightPos then      
-            if (rightArm.Position - lastRightPos).Magnitude >= TRAIL_CONFIG.maxSegmentLength then      
-                createContinuousTrail(lastRightPos, rightArm.Position)      
-                lastRightPos = rightArm.Position      
-            end      
-        else      
-            lastRightPos = rightArm.Position      
-        end      
-    end      
-end)
+    local char = plr.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not humanoid then 
+        flyEnabled = false
+        return 
+    end
 
-end
+    pos = Instance.new("BodyPosition")
+    gyro = Instance.new("BodyGyro")
+    pos.Position = root.Position + Vector3.new(0, 3, 0)
+    pos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    pos.P, pos.D = 40000, 1700  
+    gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    gyro.P, gyro.D = 40000, 1900
+    pos.Parent = root
+    gyro.Parent = root
+    
+    humanoid.PlatformStand = true
+    
+    setNoclipState(true)
+    setShiftlock(true)
+    
+    humanoid.Died:Connect(function()
+        if flyEnabled then stopFly() end
+    end)
 
-local function stopContinuousTrails()
-if trailConnection then
-trailConnection:Disconnect()
-trailConnection = nil
-end
-for _, part in ipairs(trailParts) do
-if part and part.Parent then
-part:Destroy()
-end
-end
-trailParts = {}
-lastLeftPos, lastRightPos = nil, nil
-end
-
-local function enableNoclip()
-for _, part in pairs(character:GetDescendants()) do
-if part:IsA("BasePart") then
-originalProperties[part] = part.CanCollide
-part.CanCollide = false
-end
-end
-
-if noclipConnection then noclipConnection:Disconnect() end      
-noclipConnection = RunService.Heartbeat:Connect(function()      
-    if not flightActive or not character then return end      
-    for _, part in pairs(character:GetDescendants()) do      
-        if part:IsA("BasePart") then      
-            part.CanCollide = false      
-        end      
-    end      
-end)
-
-end
-
-local function disableNoclip()
-if noclipConnection then
-noclipConnection:Disconnect()
-noclipConnection = nil
-end
-for part, state in pairs(originalProperties) do
-if part and part.Parent then
-part.CanCollide = state
-end
-end
-originalProperties = {}
-end
-
-local function startFlight()
-if flightConnection then flightConnection:Disconnect() end
-
-flightConnection = RunService.RenderStepped:Connect(function()      
-    if not flightActive then return end      
-  
-    local dir = camera.CFrame.LookVector.Unit      
-    rootPart.AssemblyLinearVelocity = dir * flightSpeed      
-    rootPart.AssemblyAngularVelocity = Vector3.zero      
-    rootPart.CFrame = CFrame.new(rootPart.Position, rootPart.Position + dir)      
-end)
-
-end
-
-local function stopFlight()
-if flightConnection then
-flightConnection:Disconnect()
-flightConnection = nil
-end
-rootPart.AssemblyLinearVelocity = Vector3.zero
-rootPart.AssemblyAngularVelocity = Vector3.zero
+    heartbeatEvent = run.Heartbeat:Connect(function()
+        if not flyEnabled then return end
+        
+        local moveDir = humanoid.MoveDirection
+        local cf = cam.CFrame
+        local travelVector = moveDir * (speed * 5)
+        local dir = cf:VectorToObjectSpace(travelVector)
+        
+        if dir.Magnitude > 0 then
+            local worldDir = cf:VectorToWorldSpace(Vector3.new(dir.X, 0, dir.Z).Unit * dir.Magnitude)
+            pos.Position = pos.Position + worldDir
+        end
+        gyro.CFrame = cf
+        
+        if flyEnabled and plr.Character then
+            for _, o in ipairs(plr.Character:GetDescendants()) do
+                if o:IsA("BasePart") then o.CanCollide = false end
+            end
+        end
+        
+        humanoid.PlatformStand = true
+    end)
 end
 
 local screenGui = Instance.new("ScreenGui")
@@ -207,7 +156,7 @@ layout.Parent = mainFrame
 
 local speedInput = Instance.new("TextBox")
 speedInput.Size = UDim2.new(0, 65, 0, 22)
-speedInput.Text = tostring(DEFAULT_SPEED)
+speedInput.Text = tostring(speed)
 speedInput.TextSize = 10
 speedInput.Font = Enum.Font.Gotham
 speedInput.TextColor3 = Color3.new(1,1,1)
@@ -235,51 +184,39 @@ buttonCorner.CornerRadius = UDim.new(0, 12)
 buttonCorner.Parent = toggleButton
 
 speedInput.FocusLost:Connect(function()
-local val = tonumber(speedInput.Text)
-if val then
-flightSpeed = math.clamp(val, MIN_SPEED, MAX_SPEED)
-speedInput.Text = tostring(flightSpeed)
-else
-speedInput.Text = tostring(flightSpeed)
-end
+    local num = tonumber(speedInput.Text)
+    if num and num > 0 then 
+        speed = num 
+        speedInput.Text = tostring(speed)
+    else
+        speedInput.Text = tostring(speed)
+    end
 end)
 
-local function toggleFlight()
-flightActive = not flightActive
-
-if flightActive then      
-    toggleButton.Text = "✈"      
-    toggleButton.BackgroundColor3 = Color3.fromRGB(200,60,60)      
-  
-    enableNoclip()      
-    playFlightAnimation()      
-    startContinuousTrails()      
-    startFlight()      
-else      
-    toggleButton.Text = "GO"      
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)      
-  
-    stopFlight()      
-    stopContinuousTrails()      
-    stopFlightAnimation()      
-    disableNoclip()      
-end
-
-end
-
-toggleButton.MouseButton1Click:Connect(toggleFlight)
-
-player.CharacterAdded:Connect(function(char)
-character = char
-humanoid = char:WaitForChild("Humanoid")
-rootPart = char:WaitForChild("HumanoidRootPart")
-
-flightActive = false      
-stopFlightAnimation()      
-uncarpet()      
-disableNoclip()      
-stopContinuousTrails()
-
+toggleButton.MouseButton1Click:Connect(function()
+    if flyEnabled then
+        stopFly()
+    else
+        startFly()
+    end
 end)
 
-print("Flight script with compact pill GUI and infinite speed loaded!")
+toggleButton.MouseEnter:Connect(function()
+    if not flyEnabled then
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0,150,230)
+    else
+        toggleButton.BackgroundColor3 = Color3.fromRGB(220,70,70)
+    end
+end)
+
+toggleButton.MouseLeave:Connect(function()
+    if not flyEnabled then
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)
+    else
+        toggleButton.BackgroundColor3 = Color3.fromRGB(200,60,60)
+    end
+end)
+
+plr.CharacterRemoving:Connect(function() 
+    if flyEnabled then stopFly() end
+end)
