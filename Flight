@@ -5,7 +5,7 @@ local playerGui = plr:WaitForChild("PlayerGui")
 local userInputService = game:GetService("UserInputService")
 
 local flyEnabled = false
-local speed = 2
+local speed = 0.7
 local pos, gyro, heartbeatEvent
 
 local function setShiftlock(state)
@@ -101,25 +101,39 @@ buttonCorner.Parent = toggleButton
 
 local function stopFly()
     flyEnabled = false
+    
     if heartbeatEvent then 
         heartbeatEvent:Disconnect() 
         heartbeatEvent = nil
     end
-    if pos then pos:Destroy() pos = nil end
-    if gyro then gyro:Destroy() gyro = nil end
     
-    setNoclipState(false)
-    setShiftlock(false)
+    if pos then 
+        pos:Destroy() 
+        pos = nil 
+    end
+    if gyro then 
+        gyro:Destroy() 
+        gyro = nil 
+    end
     
     local char = plr.Character
     if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+        
         local humanoid = char:FindFirstChildOfClass("Humanoid")
         if humanoid then 
             humanoid.PlatformStand = false 
-            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
         end
+        
         resetCharacterCollision(char)
     end
+    
+    setNoclipState(false)
+    setShiftlock(false)
     
     toggleButton.Text = "GO"
     toggleButton.BackgroundColor3 = Color3.fromRGB(0,130,210)
@@ -142,11 +156,14 @@ local function startFly()
 
     pos = Instance.new("BodyPosition")
     gyro = Instance.new("BodyGyro")
-    pos.Position = root.Position + Vector3.new(0, 3, 0)
+    pos.Position = root.Position
     pos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    pos.P, pos.D = 40000, 1700  
+    pos.P = 50000
+    pos.D = 2000
     gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    gyro.P, gyro.D = 40000, 1900
+    gyro.P = 50000
+    gyro.D = 2000
+    gyro.CFrame = cam.CFrame
     pos.Parent = root
     gyro.Parent = root
     
@@ -154,32 +171,51 @@ local function startFly()
     
     setNoclipState(true)
     setShiftlock(true)
-    
-    humanoid.Died:Connect(function()
-        if flyEnabled then stopFly() end
-    end)
 
     heartbeatEvent = run.Heartbeat:Connect(function()
         if not flyEnabled then return end
         
-        local moveDir = humanoid.MoveDirection
-        local cf = cam.CFrame
-        local travelVector = moveDir * (speed * 5)
-        local dir = cf:VectorToObjectSpace(travelVector)
+        local currentChar = plr.Character
+        local currentRoot = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
+        local currentHumanoid = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
         
-        if dir.Magnitude > 0 then
-            local worldDir = cf:VectorToWorldSpace(Vector3.new(dir.X, 0, dir.Z).Unit * dir.Magnitude)
-            pos.Position = pos.Position + worldDir
+        if not currentRoot or not currentHumanoid then 
+            return 
         end
-        gyro.CFrame = cf
         
-        if flyEnabled and plr.Character then
-            for _, o in ipairs(plr.Character:GetDescendants()) do
-                if o:IsA("BasePart") then o.CanCollide = false end
+        if pos then
+            local dist = (pos.Position - currentRoot.Position).Magnitude
+            if dist > 20 then
+                pos.Position = currentRoot.Position
             end
         end
         
-        humanoid.PlatformStand = true
+        if gyro then
+            gyro.CFrame = cam.CFrame
+        end
+        
+        local moveDir = currentHumanoid.MoveDirection
+        
+        if moveDir.Magnitude > 0 then
+            local camLook = cam.CFrame.LookVector
+            local horizontal = moveDir
+            local vertical = Vector3.new(0, camLook.Y, 0)
+            local moveVector = (horizontal + vertical).Unit * (speed * 50)
+            
+            if pos then
+                pos.Position = pos.Position + moveVector
+            end
+        end
+        
+        if currentChar then
+            for _, o in ipairs(currentChar:GetDescendants()) do
+                if o:IsA("BasePart") then
+                    o.CanCollide = false
+                end
+            end
+        end
+        
+        currentHumanoid.PlatformStand = true
     end)
 end
 
