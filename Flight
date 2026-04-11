@@ -5,7 +5,7 @@ local playerGui = plr:WaitForChild("PlayerGui")
 local userInputService = game:GetService("UserInputService")
 
 local flyEnabled = false
-local speed = 0.5
+local speed = 0.7
 local pos, gyro, heartbeatEvent
 
 local function setShiftlock(state)
