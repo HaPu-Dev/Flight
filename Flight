@@ -5,7 +5,7 @@ local playerGui = plr:WaitForChild("PlayerGui")
 local userInputService = game:GetService("UserInputService")
 
 local flyEnabled = false
-local speed = 0.7
+local speed = 0.5
 local pos, gyro, heartbeatEvent
 
 local function setShiftlock(state)
@@ -184,10 +184,7 @@ local function startFly()
         end
         
         if pos then
-            local dist = (pos.Position - currentRoot.Position).Magnitude
-            if dist > 20 then
-                pos.Position = currentRoot.Position
-            end
+            pos.Position = currentRoot.Position
         end
         
         if gyro then
@@ -198,8 +195,14 @@ local function startFly()
         
         if moveDir.Magnitude > 0 then
             local camLook = cam.CFrame.LookVector
+            
             local horizontal = moveDir
-            local vertical = Vector3.new(0, camLook.Y, 0)
+            local vertical = Vector3.new(0, 0, 0)
+            
+            if moveDir:Dot(cam.CFrame.LookVector) > 0 then
+                vertical = Vector3.new(0, camLook.Y, 0)
+            end
+            
             local moveVector = (horizontal + vertical).Unit * (speed * 50)
             
             if pos then
